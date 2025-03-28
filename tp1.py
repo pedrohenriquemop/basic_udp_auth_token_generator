@@ -101,103 +101,107 @@ def getGTStatusFromResponse(packed_response):
     return packed_response[-1]
 
 
-if len(sys.argv) < 4:
-    print("Usage: python tp1.py <server_address> <port> <command>")
-    sys.exit(1)
-
-server_address = sys.argv[1]
-port = int(sys.argv[2])
-
-command = sys.argv[3]
-
-command_args = sys.argv[4:]
-
-if command == "itr":
-    if len(command_args) != 2:
-        print("Usage: itr <id> <nonce>")
+def main():
+    if len(sys.argv) < 4:
+        print("Usage: python tp1.py <server_address> <port> <command>")
         sys.exit(1)
 
-    user_id = command_args[0]
-    user_nonce = command_args[1]
+    server_address = sys.argv[1]
+    port = int(sys.argv[2])
 
-    client_socket = getUDPSocket(server_address, port)
+    command = sys.argv[3]
 
-    # !H12sI:
-    # ! -> network byte order
-    # H -> unsigned short (2 bytes)
-    # 12s -> 12 bytes string
-    # I -> unsigned int (4 bytes)
-    message = struct.pack(
-        "!H12sI", 1, bytes(user_id.ljust(12), encoding="ascii"), int(user_nonce)
-    )
+    command_args = sys.argv[4:]
 
-    client_socket.send(message)
+    if command == "itr":
+        if len(command_args) != 2:
+            print("Usage: itr <id> <nonce>")
+            sys.exit(1)
 
-    response = client_socket.recv(82)
+        user_id = command_args[0]
+        user_nonce = command_args[1]
 
-    print(packedToFormattedSAS(response))
+        client_socket = getUDPSocket(server_address, port)
 
-    client_socket.close()
-elif command == "itv":
-    if len(command_args) != 1:
-        print("Usage: itv <SAS>")
+        # !H12sI:
+        # ! -> network byte order
+        # H -> unsigned short (2 bytes)
+        # 12s -> 12 bytes string
+        # I -> unsigned int (4 bytes)
+        message = struct.pack(
+            "!H12sI", 1, bytes(user_id.ljust(12), encoding="ascii"), int(user_nonce)
+        )
+
+        client_socket.send(message)
+
+        response = client_socket.recv(82)
+
+        print(packedToFormattedSAS(response))
+
+        client_socket.close()
+    elif command == "itv":
+        if len(command_args) != 1:
+            print("Usage: itv <SAS>")
+            sys.exit(1)
+
+        sas = command_args[0]
+
+        client_socket = getUDPSocket(server_address, port)
+
+        # 3 -> code for Individual Token Validation
+        message = packItvStruct(3, sas)
+
+        client_socket.send(message)
+
+        response = client_socket.recv(83)
+
+        print(getITStatusFromResponse(response))
+
+        client_socket.close()
+    elif command == "gtr":
+        if len(command_args) < 2:
+            print("Usage: gtr <N> <SAS-1> <SAS-2> ... <SAS-N>")
+            sys.exit(1)
+
+        sas_amount = int(command_args[0])
+        sas_list = command_args[1:]
+
+        client_socket = getUDPSocket(server_address, port)
+
+        # 5 -> code for Group Token Request
+        message = packGtrStruct(5, sas_amount, sas_list)
+
+        client_socket.send(message)
+
+        response = client_socket.recv(4 + 80 * sas_amount + 64)
+
+        print(packedToFormattedGAS(response))
+
+        client_socket.close()
+    elif command == "gtv":
+        if len(command_args) != 1:
+            print("Usage: gtv <GAS>")
+            sys.exit(1)
+
+        gas = command_args[0]
+
+        client_socket = getUDPSocket(server_address, port)
+
+        # 7 -> code for Group Token Validation
+        message = packGtvStruct(7, gas)
+
+        client_socket.send(message)
+
+        n = getNFromFormattedGas(gas)
+
+        response = client_socket.recv(69 + 80 * n)
+
+        print(getGTStatusFromResponse(response))
+
+        client_socket.close()
+    else:
+        print("Invalid command")
         sys.exit(1)
 
-    sas = command_args[0]
 
-    client_socket = getUDPSocket(server_address, port)
-
-    # 3 -> code for Individual Token Validation
-    message = packItvStruct(3, sas)
-
-    client_socket.send(message)
-
-    response = client_socket.recv(83)
-
-    print(getITStatusFromResponse(response))
-
-    client_socket.close()
-elif command == "gtr":
-    if len(command_args) < 2:
-        print("Usage: gtr <N> <SAS-1> <SAS-2> ... <SAS-N>")
-        sys.exit(1)
-
-    sas_amount = int(command_args[0])
-    sas_list = command_args[1:]
-
-    client_socket = getUDPSocket(server_address, port)
-
-    # 5 -> code for Group Token Request
-    message = packGtrStruct(5, sas_amount, sas_list)
-
-    client_socket.send(message)
-
-    response = client_socket.recv(4 + 80 * sas_amount + 64)
-
-    print(packedToFormattedGAS(response))
-
-    client_socket.close()
-elif command == "gtv":
-    if len(command_args) != 1:
-        print("Usage: gtv <GAS>")
-        sys.exit(1)
-
-    gas = command_args[0]
-
-    client_socket = getUDPSocket(server_address, port)
-
-    # 7 -> code for Group Token Validation
-    message = packGtvStruct(7, gas)
-
-    client_socket.send(message)
-
-    n = getNFromFormattedGas(gas)
-
-    response = client_socket.recv(69 + 80 * n)
-
-    print(getGTStatusFromResponse(response))
-
-    client_socket.close()
-else:
-    print("Invalid command")
-    sys.exit(1)
+main()
