@@ -38,7 +38,7 @@ def packedToFormattedGAS(packed_gas):
 
     token = struct.unpack("!64s", packed_gas[4 + n * 80 :])[0].decode("ascii")
 
-    return f"{n}+{'+'.join(formatted_sas_list)}+{token}"
+    return f"{'+'.join(formatted_sas_list)}+{token}"
 
 
 def formattedToPackedSAS(id, nonce, token):
