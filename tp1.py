@@ -148,7 +148,6 @@ def handleItrCommand(server_address, port, command_args):
 
     client_socket = getUDPSocket(server_address, port)
 
-    # 1 -> code for Individual Token Request
     message = packItrStruct(
         user_id,
         user_nonce,
@@ -172,7 +171,6 @@ def handleItvCommand(server_address, port, command_args):
 
     client_socket = getUDPSocket(server_address, port)
 
-    # 3 -> code for Individual Token Validation
     message = packItvStruct(sas)
 
     client_socket.send(message)
@@ -194,7 +192,6 @@ def handleGtrCommand(server_address, port, command_args):
 
     client_socket = getUDPSocket(server_address, port)
 
-    # 5 -> code for Group Token Request
     message = packGtrStruct(sas_amount, sas_list)
 
     client_socket.send(message)
