@@ -2,9 +2,10 @@ import socket
 import sys
 import struct
 from enum import Enum
+import time
 
-# SERVER: pugna.snes.dcc.ufmg.br (150.164.213.243, 2804:1f4a:dcc:ff03::1)
-# port: 51001
+MAX_RETRIES = 3
+TIMEOUT_SECONDS = 5
 
 
 class RequestCode(Enum):
@@ -21,12 +22,49 @@ class ResponseCode(Enum):
     GROUP_TOKEN_STATUS = 8
 
 
+class ErrorCode(Enum):
+    INVALID_MESSAGE_CODE = 1
+    INCORRECT_MESSAGE_LENGTH = 2
+    INVALID_PARAMETER = 3
+    INVALID_SINGLE_TOKEN = 4
+    ASCII_DECODE_ERROR = 5
+
+
 CODE_ID_NONCE_STRUCT_FORMAT = "!H12sI"
 SAS_STRUCT_FORMAT = "!12sI64s"
 CODE_STRUCT_FORMAT = "!H"
 N_STRUCT_FORMAT = "!H"
 CODE_N_STRUCT_FORMAT = "!HH"
+ERROR_STRUCT_FORMAT = "!HH"
 TOKEN_STRUCT_FORMAT = "!64s"
+
+
+def create_socket(server_address, port):
+    addrinfo = socket.getaddrinfo(server_address, None)
+    family = addrinfo[0][0]
+    client_socket = socket.socket(family, socket.SOCK_DGRAM)
+    client_socket.settimeout(TIMEOUT_SECONDS)
+    client_socket.connect((server_address, port))
+    return client_socket
+
+
+def send_with_retry(client_socket, message, expected_response_size):
+    for attempt in range(MAX_RETRIES):
+        try:
+            client_socket.send(message)
+            response = client_socket.recv(expected_response_size)
+            return response
+        except socket.timeout:
+            print(f"Timed out. Attempt {attempt + 1} of {MAX_RETRIES}")
+    raise TimeoutError("Limit of retries reached.")
+
+
+def verify_error(response):
+    error_code = struct.unpack(ERROR_STRUCT_FORMAT, response)
+    if error_code[0] == 256:
+        error_message = ErrorCode(error_code[1]).name
+        print(f"Server error: {error_message}")
+        sys.exit(1)
 
 
 def getUDPSocket(server_address, port):
@@ -146,20 +184,19 @@ def handleItrCommand(server_address, port, command_args):
     user_id = command_args[0]
     user_nonce = command_args[1]
 
-    client_socket = getUDPSocket(server_address, port)
+    client_socket = create_socket(server_address, port)
 
     message = packItrStruct(
         user_id,
         user_nonce,
     )
 
-    client_socket.send(message)
-
-    response = client_socket.recv(82)
-
-    print(packedToFormattedSAS(response))
-
-    client_socket.close()
+    try:
+        response = send_with_retry(client_socket, message, 82)
+        verify_error(response)
+        print(packedToFormattedSAS(response))
+    finally:
+        client_socket.close()
 
 
 def handleItvCommand(server_address, port, command_args):
