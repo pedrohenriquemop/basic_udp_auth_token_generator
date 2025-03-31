@@ -20,12 +20,12 @@ def run_command(command_args, address=SERVER_ADDRESS_IPV4):
 
 
 @pytest.mark.skip("auxiliar method")
-def test_itr(id, nonce):
-    result = run_command(["itr", id, nonce])
+def test_itr(id, expected_nonce):
+    result = run_command(["itr", id, expected_nonce])
     sas = result.stdout.strip()
     [id, nonce, token] = sas.split(":")
     assert id == id
-    assert nonce == nonce
+    assert nonce == expected_nonce
     assert len(token) == 64
     return sas
 

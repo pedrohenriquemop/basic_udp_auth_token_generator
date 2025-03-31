@@ -2,7 +2,18 @@ import socket
 import sys
 import struct
 from enum import Enum
-import time
+
+# SERVER: pugna.snes.dcc.ufmg.br (150.164.213.243, 2804:1f4a:dcc:ff03::1)
+# port: 51001
+#
+# Usage:
+# python3 tp1.py <address> <port> <command> <args>
+#
+# Commands:
+# itr <id> <nonce> (returns <SAS>)
+# itv <SAS> (returns <status>, 0 for valid, != 0 for invalid)
+# gtr <N> <SAS-1> <SAS-2> ... <SAS-N> (returns <GAS>)
+# gtv <GAS> (returns <status>, 0 for valid, != 0 for invalid)
 
 MAX_RETRIES = 3
 TIMEOUT_SECONDS = 5
@@ -35,7 +46,6 @@ SAS_STRUCT_FORMAT = "!12sI64s"
 CODE_STRUCT_FORMAT = "!H"
 N_STRUCT_FORMAT = "!H"
 CODE_N_STRUCT_FORMAT = "!HH"
-ERROR_STRUCT_FORMAT = "!HH"
 TOKEN_STRUCT_FORMAT = "!64s"
 
 
@@ -59,23 +69,24 @@ def send_with_retry(client_socket, message, expected_response_size):
     raise TimeoutError("Limit of retries reached.")
 
 
-def verify_error(response):
-    error_code = struct.unpack(ERROR_STRUCT_FORMAT, response)
-    if error_code[0] == 256:
-        error_message = ErrorCode(error_code[1]).name
-        print(f"Server error: {error_message}")
-        sys.exit(1)
+def verify_response_code(response, expected_code):
+    if len(response) < 2:
+        raise RuntimeError("Invalid response")
+    unpacked = struct.unpack(CODE_STRUCT_FORMAT, response[:2])
+    if unpacked[0] != expected_code:
+        print(unpacked[0], expected_code)
+        if unpacked[0] == 256:
+            raise_error_message(unpacked[0])
+            return
+        raise RuntimeError("Invalid response code")
 
 
-def getUDPSocket(server_address, port):
-    addrinfo = socket.getaddrinfo(server_address, None)
-    family = addrinfo[0][0]
-
-    client_socket = socket.socket(family, socket.SOCK_DGRAM)
-
-    client_socket.connect((server_address, port))
-
-    return client_socket
+def raise_error_message(error_code):
+    if error_code in ErrorCode.__members__:
+        error_message = ErrorCode(error_code).name
+        raise RuntimeError(f"Server error: {error_message}")
+    else:
+        raise RuntimeError("Invalid error code")
 
 
 def packedToFormattedSAS(packed_sas, code_included=True):
@@ -193,8 +204,11 @@ def handleItrCommand(server_address, port, command_args):
 
     try:
         response = send_with_retry(client_socket, message, 82)
-        verify_error(response)
+        verify_response_code(response, ResponseCode.INDIVIDUAL_TOKEN_RESPONSE.value)
         print(packedToFormattedSAS(response))
+    except RuntimeError as e:
+        print(e)
+        sys.exit(1)
     finally:
         client_socket.close()
 
@@ -206,17 +220,19 @@ def handleItvCommand(server_address, port, command_args):
 
     sas = command_args[0]
 
-    client_socket = getUDPSocket(server_address, port)
+    client_socket = create_socket(server_address, port)
 
     message = packItvStruct(sas)
 
-    client_socket.send(message)
-
-    response = client_socket.recv(83)
-
-    print(getITStatusFromResponse(response))
-
-    client_socket.close()
+    try:
+        response = send_with_retry(client_socket, message, 83)
+        verify_response_code(response, ResponseCode.INDIVIDUAL_TOKEN_STATUS.value)
+        print(getITStatusFromResponse(response))
+    except RuntimeError as e:
+        print(e)
+        sys.exit(1)
+    finally:
+        client_socket.close()
 
 
 def handleGtrCommand(server_address, port, command_args):
@@ -227,17 +243,19 @@ def handleGtrCommand(server_address, port, command_args):
     sas_amount = int(command_args[0])
     sas_list = command_args[1:]
 
-    client_socket = getUDPSocket(server_address, port)
+    client_socket = create_socket(server_address, port)
 
     message = packGtrStruct(sas_amount, sas_list)
 
-    client_socket.send(message)
-
-    response = client_socket.recv(4 + 80 * sas_amount + 64)
-
-    print(packedToFormattedGAS(response))
-
-    client_socket.close()
+    try:
+        response = send_with_retry(client_socket, message, 4 + 80 * sas_amount + 64)
+        verify_response_code(response, ResponseCode.GROUP_TOKEN_RESPONSE.value)
+        print(packedToFormattedGAS(response))
+    except RuntimeError as e:
+        print(e)
+        sys.exit(1)
+    finally:
+        client_socket.close()
 
 
 def handleGtvCommand(server_address, port, command_args):
@@ -247,20 +265,21 @@ def handleGtvCommand(server_address, port, command_args):
 
     gas = command_args[0]
 
-    client_socket = getUDPSocket(server_address, port)
+    client_socket = create_socket(server_address, port)
 
-    # 7 -> code for Group Token Validation
     message = packGtvStruct(gas)
-
-    client_socket.send(message)
 
     n = getNFromFormattedGas(gas)
 
-    response = client_socket.recv(69 + 80 * n)
-
-    print(getGTStatusFromResponse(response))
-
-    client_socket.close()
+    try:
+        response = send_with_retry(client_socket, message, 69 + 80 * n)
+        verify_response_code(response, ResponseCode.GROUP_TOKEN_STATUS.value)
+        print(getGTStatusFromResponse(response))
+    except RuntimeError as e:
+        print(e)
+        sys.exit(1)
+    finally:
+        client_socket.close()
 
 
 def main():
