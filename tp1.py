@@ -41,6 +41,13 @@ class ErrorCode(Enum):
     ASCII_DECODE_ERROR = 5
 
 
+class ExpectedResponseSize(Enum):
+    INDIVIDUAL_TOKEN_RESPONSE = 82
+    INDIVIDUAL_TOKEN_STATUS = 83
+    GROUP_TOKEN_RESPONSE = lambda sas_amount: 4 + 80 * sas_amount + 64
+    GROUP_TOKEN_STATUS = lambda n: 69 + 80 * n
+
+
 CODE_ID_NONCE_STRUCT_FORMAT = "!H12sI"
 SAS_STRUCT_FORMAT = "!12sI64s"
 CODE_STRUCT_FORMAT = "!H"
@@ -187,6 +194,20 @@ def getGTStatusFromResponse(packed_response):
     return packed_response[-1]
 
 
+def handleCommandResponse(
+    client_socket, message, expected_response_size, expected_code, format_response_func
+):
+    try:
+        response = send_with_retry(client_socket, message, expected_response_size)
+        verify_response_code(response, expected_code)
+        print(format_response_func(response))
+    except RuntimeError as e:
+        print(e)
+        sys.exit(1)
+    finally:
+        client_socket.close()
+
+
 def handleItrCommand(server_address, port, command_args):
     if len(command_args) != 2:
         print("Usage: itr <id> <nonce>")
@@ -202,15 +223,13 @@ def handleItrCommand(server_address, port, command_args):
         user_nonce,
     )
 
-    try:
-        response = send_with_retry(client_socket, message, 82)
-        verify_response_code(response, ResponseCode.INDIVIDUAL_TOKEN_RESPONSE.value)
-        print(packedToFormattedSAS(response))
-    except RuntimeError as e:
-        print(e)
-        sys.exit(1)
-    finally:
-        client_socket.close()
+    handleCommandResponse(
+        client_socket,
+        message,
+        ExpectedResponseSize.INDIVIDUAL_TOKEN_RESPONSE.value,
+        ResponseCode.INDIVIDUAL_TOKEN_RESPONSE.value,
+        packedToFormattedSAS,
+    )
 
 
 def handleItvCommand(server_address, port, command_args):
@@ -224,15 +243,13 @@ def handleItvCommand(server_address, port, command_args):
 
     message = packItvStruct(sas)
 
-    try:
-        response = send_with_retry(client_socket, message, 83)
-        verify_response_code(response, ResponseCode.INDIVIDUAL_TOKEN_STATUS.value)
-        print(getITStatusFromResponse(response))
-    except RuntimeError as e:
-        print(e)
-        sys.exit(1)
-    finally:
-        client_socket.close()
+    handleCommandResponse(
+        client_socket,
+        message,
+        ExpectedResponseSize.INDIVIDUAL_TOKEN_STATUS.value,
+        ResponseCode.INDIVIDUAL_TOKEN_STATUS.value,
+        getITStatusFromResponse,
+    )
 
 
 def handleGtrCommand(server_address, port, command_args):
@@ -247,15 +264,13 @@ def handleGtrCommand(server_address, port, command_args):
 
     message = packGtrStruct(sas_amount, sas_list)
 
-    try:
-        response = send_with_retry(client_socket, message, 4 + 80 * sas_amount + 64)
-        verify_response_code(response, ResponseCode.GROUP_TOKEN_RESPONSE.value)
-        print(packedToFormattedGAS(response))
-    except RuntimeError as e:
-        print(e)
-        sys.exit(1)
-    finally:
-        client_socket.close()
+    handleCommandResponse(
+        client_socket,
+        message,
+        ExpectedResponseSize.GROUP_TOKEN_RESPONSE(sas_amount),
+        ResponseCode.GROUP_TOKEN_RESPONSE.value,
+        packedToFormattedGAS,
+    )
 
 
 def handleGtvCommand(server_address, port, command_args):
@@ -271,15 +286,13 @@ def handleGtvCommand(server_address, port, command_args):
 
     n = getNFromFormattedGas(gas)
 
-    try:
-        response = send_with_retry(client_socket, message, 69 + 80 * n)
-        verify_response_code(response, ResponseCode.GROUP_TOKEN_STATUS.value)
-        print(getGTStatusFromResponse(response))
-    except RuntimeError as e:
-        print(e)
-        sys.exit(1)
-    finally:
-        client_socket.close()
+    handleCommandResponse(
+        client_socket,
+        message,
+        ExpectedResponseSize.GROUP_TOKEN_STATUS(n),
+        ResponseCode.GROUP_TOKEN_STATUS.value,
+        getGTStatusFromResponse,
+    )
 
 
 def main():
