@@ -4,7 +4,7 @@ import struct
 from enum import Enum
 
 # Usage:
-# python3 tp1.py <address> <port> <command> <args>
+# python3 tp0.py <address> <port> <command> <args>
 #
 # Commands:
 # itr <id> <nonce> (returns <SAS>)
@@ -294,7 +294,7 @@ def handleGtvCommand(server_address, port, command_args):
 
 def main():
     if len(sys.argv) < 4:
-        print("Usage: python tp1.py <server_address> <port> <command>")
+        print("Usage: python tp0.py <server_address> <port> <command>")
         sys.exit(1)
 
     server_address = sys.argv[1]
