@@ -3,9 +3,6 @@ import sys
 import struct
 from enum import Enum
 
-# SERVER: pugna.snes.dcc.ufmg.br (150.164.213.243, 2804:1f4a:dcc:ff03::1)
-# port: 51001
-#
 # Usage:
 # python3 tp1.py <address> <port> <command> <args>
 #

@@ -1,12 +1,17 @@
 import subprocess
 import pytest
+import os
+from dotenv import load_dotenv
 
 # Define script path
-SCRIPT_PATH = "tp1.py"
-SERVER_ADDRESS_NAME = "pugna.snes.dcc.ufmg.br"
-SERVER_ADDRESS_IPV4 = "150.164.213.243"
-SERVER_ADDRESS_IPV6 = "2804:1f4a:dcc:ff03::1"
-PORT = "51001"
+SCRIPT_PATH = "tp0.py"
+
+load_dotenv(".env")
+
+SERVER_ADDRESS_NAME = os.getenv("SERVER_ADDRESS_NAME")
+SERVER_ADDRESS_IPV4 = os.getenv("SERVER_ADDRESS_IPV4")
+SERVER_ADDRESS_IPV6 = os.getenv("SERVER_ADDRESS_IPV6")
+PORT = os.getenv("PORT")
 
 
 def run_command(command_args, address=SERVER_ADDRESS_IPV4):
